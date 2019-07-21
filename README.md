@@ -1,13 +1,11 @@
 # iti.backendtest
 Teste para posição de back-end
 
-Para executar via linha de comando:
-Estando na pasta da solution, executar
-dotnet run --project iti.backendtest/iti.backendtest.csproj "[path para o arquivo de log]"
+Para executar via linha de comando, estando na pasta da solution, executar:
+#### dotnet run --project iti.backendtest/iti.backendtest.csproj "[path para o arquivo de log]"
 
-Para executar os testes via linha de comando:
-Estando na pasta da solution, executar
-dotnet test iti.backendtest.Tests/iti.backendtest.Tests.csproj
+Para executar os testes via linha de comando, estando na pasta da solution, executar:
+#### dotnet test iti.backendtest.Tests/iti.backendtest.Tests.csproj
 
 # Premissas
 Como não havia como fazer questões prévias, realizei o desenvolvimento partindo de algumas premissas, a saber:
