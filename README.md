@@ -14,3 +14,4 @@ Como não havia como fazer questões prévias, realizei o desenvolvimento partin
 - Todas as linhas (exceto a primeira) terão valores corretos, separados por 3 tabs, com os seguintes formatos:
   - Primeira columa: DD-MMM
   - Terceira coluna: Valor decimal formatado no padrão brasileiro (vírgula como separador de casas decimais e ponto como separador de milhar)
+- O resultado não está sendo arredondado, porém, os cálculos foram feitos utilizando o tipo decimal, para evitar possíveis erros de conversão inerentes ao tipo double.
