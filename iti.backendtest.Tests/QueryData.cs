@@ -21,6 +21,18 @@ namespace iti.backendtest.Tests
         }
 
         [TestMethod]
+        public void LinhaCorretaMesIncorreto()
+        {
+            try
+            {
+                buildConsolidatorFromLog(new List<string> { "ignorar", "29-Max	Hirota	-13	alimentacao" }, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                Assert.IsTrue(ex.Message.StartsWith("Erro no formato da linha 29-Max"));
+            }
+        }
+        [TestMethod]
         public void LinhaCorreta()
         {
             var obj = buildConsolidatorFromLog(new List<string> { "ignorar", "29-May	Hirota	-13	alimentacao", "30-May	Hirota	-13	alimentacao" }, CancellationToken.None);
@@ -58,6 +70,18 @@ namespace iti.backendtest.Tests
         {
             var obj = buildConsolidatorFromJson("[{data: '11/jul',descricao: 'x',valor: '-13,00', categoria: 'x' }, {data: '11/jul',descricao: 'x',valor: '-13,00', categoria: 'x' }]", CancellationToken.None);
             Assert.AreEqual(-26, obj.GetBalance());
+        }
+        [TestMethod]
+        public void ErroDeMesIncorretoJson()
+        {
+            try
+            {
+                buildConsolidatorFromJson("[{data: '11/jus',descricao: 'x',valor: '-13,00', categoria: 'x' }, {data: '11/jul',descricao: 'x',valor: '-13,00', categoria: 'x' }]", CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                Assert.IsTrue(ex.Message.StartsWith("Erro no formato do elemento na posição 0: Mês"));
+            }
         }
         [TestMethod]
         public void ErroDeFormatoJson()
