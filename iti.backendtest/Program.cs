@@ -3,55 +3,122 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace iti.backendtest
 {
-    class Program
+    public class Program
     {
+        private static readonly CultureInfo ci = new CultureInfo("pt-br");
+
+
         static void Main(string[] args)
         {
-            var obj = new Consolidator();
+            var logFilePath = args[0];
+            var isLogFileEstimatedAsBig = args.Length > 0 && args[1] == "1";
 
-            //A leitura das linhas do arquivo de log deverá ser feita por meio de um iterator, de modo a manter um consumo
-            //menor de memória do que a leitura completa do arquivo, já que eu não sei o tamanho dos logs e preciso apenas de acesso
-            //sequencial às linhas.
-            var lines = File.ReadLines(args[0]);
+            //Se o arquivo for muito grande, vale a pena utilizar o sistema de arquivos para armazenar a lista das movimentações.
+            //O uso de memória (e consequentemente a pressão sobre o GC) é muito menor. Utilizando um arquivo de 1.5 milhão de linhas, a execução
+            //diretamente na memória RAM consumiu 367Mb, e levou 3 minutos. Na mesma máquina, a execução utilizando o disco (SSD) consumiu apenas 
+            //95Mb de RAM e levou 3:04 minutos. Houve muito menos execuções do GC, o que provavelmente equilibrou a velocidade em relação ao acesso ao disco, que é mais lento.
+            //Se o arquivo for pequeno, a diferença no uso de memória não compensa. Seria preciso realizar benchmarkings para identificar o ponto ótimo
+            //no qual passamos a ver vantagem em utilizar o sistema de arquivos e assim deixar o sistema escolher automaticamente baseando-se no tamanho do arquivo, por exemplo.
+            //Em relação aos JSONs, utilizei o Newtonsoft, que é utilizado pelo próprio .Net Core até a versão 2.2. Isso significa que um arquivo json muito grande levará a um consumo grande de memória RAM.
+            //Na versão 3, haveria a possibilidade de utilizar o novo serializador, que consegue fazer a leitura do JSON de forma iterativa, o que levaria a uma redução no uso de memória.
 
-            //Pular a primeira linha, que contém os títulos das colunas.
-            lines.GetEnumerator().MoveNext();
-
-            foreach (var line in lines)
+            var entryCollector = isLogFileEstimatedAsBig ? (IEntryCollector)new EntryCollectorFile() : new EntryCollectorMemory();
+            using (var obj = new Consolidator(ci, entryCollector))
             {
-                var lineData = readLine(line);
-                obj.ProcessEntry(lineData.Month, lineData.Value, lineData.Category);
+                //As três chamadas (arquivo de log, e os endpoints de pagamentos e recebimentos) não tem dependências entre si, logo, podem ser paralelizadas.
+                //A única consequência foi a necessidade de deixar o Consolidador thread-safe.
+                //Caso alguma das chamadas apresente erro, estou assumindo que o resultado do log não será confiável, logo, as demais chamadas serão canceladas pelo CancellationToken e o erro será apresentado.
+                using (var cancelToken = new CancellationTokenSource())
+                {
+                    async Task callThreadExec(Func<Task> fn)
+                    {
+                        try
+                        {
+                            await fn();
+                        }
+                        catch
+                        {
+                            cancelToken.Cancel();
+                            throw;
+                        }
+                    }
+
+                    //No .Net Core 3 haverá a classe IAsyncEnumerable, que eliminaria a necessidade de utilizar Task.Run no método ReadLog.
+                    Task threadFile(string filePath) => callThreadExec(() => Task.Run(() => QueryData.ReadLog(File.ReadLines(filePath), obj, cancelToken.Token)));
+                    Task threadJson(string url) => callThreadExec(async () =>
+                    {
+                        try
+                        {
+                            var ret = await readJsonAsync(url, cancelToken.Token);
+                            if (!ret.Success)
+                                throw new Exception(ret.Result);
+                            QueryData.ReadJson(ret.Result, obj, cancelToken.Token);
+                        }
+                        catch (Exception ex)
+                        {
+                            throw new Exception($"Erro na chamada a {url}: {ex.Message}");
+                        }
+                    });
+
+                    obj.Prepare();
+                    try
+                    {
+                        Task.WaitAll(
+                            threadFile(logFilePath),
+                            threadJson("https://my-json-server.typicode.com/cairano/backend-test/pagamentos"),
+                            threadJson("https://my-json-server.typicode.com/cairano/backend-test/recebimentos")
+                        );
+                        obj.End();
+                        writeSuccess(obj);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("erro: " + ex.Message);
+                    }
+                }
             }
-            Console.WriteLine(obj.GetSummary());
             Console.ReadLine();
         }
 
-        private static CultureInfo ci = new CultureInfo("pt-br");
-        private static (string Month, decimal Value, string Category) readLine(string line)
+        private const string SUMMARYMODEL = @"Sumário:
+Em qual categoria o cliente gastou mais? {0}
+Em qual mês o cliente gastou mais? {1}
+Qual o total de gastos do cliente? {2}
+Qual o total de recebimentos do cliente? {3}
+Saldo total de movimentações do cliente: {4}
+";
+        private static void writeSuccess(Consolidator obj)
         {
-            //Eu poderia ter utilizado um split, mas ele acaba alocando mais recursos do que o necessário.
-            //Em testes com milhões de registros, mesmo com split, o número de execuções do GC ficou bastante baixo,
-            //mas a execução sem ele ficou por volta de 20% mais rápida. Neste caso, mesmo tornando o código mais difícil de ler
-            //do que um split, considero que não é tão difícil assim para deixar de lado essa diminuição de alocações.
+            Console.WriteLine("Lista de todas as movimentações:");
+            foreach (var item in obj.GetOrderedEntries())
+                Console.WriteLine(item);
 
-            //Vou ignorar a primeira coluna, pois o valor que quero dela está fixo entre os índices 3 e 6.
-            //Primeiro tab, divisão entre a primeira e segunda colunas, posso ignorar também, pois não busco nada na segunda coluna.
-            var secondTab = line.IndexOf('\t', line.IndexOf('\t', 0) + 1);
+            Console.WriteLine("\n----------\n");
 
-            var lastTab = line.IndexOf('\t', secondTab + 1);
-            //O valor está entre o segundo e terceiro tabs.
-            var val = line.Substring(secondTab + 1, lastTab - secondTab - 1);
-            //A categoria está após o último tab.
-            var categ = line.Substring(lastTab + 1);
+            Console.WriteLine("Lista dos gastos por categoria:");
+            foreach (var item in obj.GetSpentByCategory())
+                Console.WriteLine($"{item.Category}: {item.Total.ToString("C", ci)}");
 
-            return (
-                line.Substring(3, 3), //considerando que o padrão desta coluna sempre será DD-MMM
-                decimal.Parse(val, ci),
-                categ.Trim()
-            );
+            Console.WriteLine("\n----------\n");
+
+            Console.WriteLine(string.Format(SUMMARYMODEL, obj.GetLowestValueByCategory(), obj.GetLowestValueByMonth(), obj.GetTotalOut().ToString("C", ci), obj.GetTotalIn().ToString("C", ci), obj.GetBalance().ToString("C", ci)));
         }
+        private static async Task<(bool Success, string Result)> readJsonAsync(string url, CancellationToken cancelToken)
+        {
+            using (var client = new HttpClient())
+            using (var response = await client.GetAsync(url, cancelToken))
+                if (response.StatusCode == HttpStatusCode.OK)
+                    return (true, await response.Content.ReadAsStringAsync());
+                else
+                    return (false, $"Erro lendo endpoint {url}: ({response.StatusCode})");
+        }
+
     }
 }

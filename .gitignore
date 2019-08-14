@@ -3,3 +3,7 @@
 ################################################################################
 
 /iti.backendtest/obj
+/iti.backendtest/bin/Debug/netcoreapp2.1
+/.vs/iti.backendtest
+/iti.backendtest.Tests/obj
+/iti.backendtest.Tests/bin/Debug/netcoreapp2.1
