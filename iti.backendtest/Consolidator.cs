@@ -22,9 +22,21 @@ namespace iti.backendtest
                 => $"{this.Day.ToString("00")}/{ci.DateTimeFormat.GetAbbreviatedMonthName(this.Month)}\t{this.Desc}\t{this.Value.ToString("N2", ci.NumberFormat)}\t{this.Category}";
         }
 
+        private class CategoryKeyIgnoreDiacritics : IEqualityComparer<string>
+        {
+            private readonly CultureInfo ci;
+            public CategoryKeyIgnoreDiacritics(CultureInfo ci) => this.ci = ci;
+            public bool Equals(string x, string y) => string.Compare(x, y, ci, CompareOptions.IgnoreNonSpace | CompareOptions.IgnoreCase) == 0;
+            //Estou retornando sempre zero para forçar a chamada ao Equals, já que as strings com letras acentuadas e sem acento teriam hashs diferentes.
+            //Isso impacta na performance do dicionário, porém, considerando que é um dicionário de poucos elementos, e considerando a necessidade
+            //de que categorias com palavras acentuadas ou não sejam agrupadas corretamente, a perda na performance acaba compensando.
+            //Uma outra possibilidade seria retirar os acentos e obter o GetHashCode da string. Optei, porém, pelo primeiro caso para não aumentar mais ainda o código.
+            public int GetHashCode(string obj) => 0;
+        }
+
         private readonly object lockObjIn = new object();
         private readonly object lockObjOut = new object();
-        private readonly ConcurrentDictionary<string, decimal> dictCategories = new ConcurrentDictionary<string, decimal>(StringComparer.InvariantCulture);
+        private readonly ConcurrentDictionary<string, decimal> dictCategories;
         private readonly ConcurrentDictionary<byte, decimal> dictMonths = new ConcurrentDictionary<byte, decimal>();
         private decimal totalOut = 0;
         private decimal totalIn = 0;
@@ -35,6 +47,8 @@ namespace iti.backendtest
         {
             this.ci = ci;
             this.entryCollector = entryCollector;
+            //O dicionário deve ignorar diferenças entre acentos, tratando caracteres acentuados e não acentuados como iguais.
+            this.dictCategories = new ConcurrentDictionary<string, decimal>(new CategoryKeyIgnoreDiacritics(ci));
         }
 
         /// <summary>

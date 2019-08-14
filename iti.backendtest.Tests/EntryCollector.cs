@@ -36,6 +36,7 @@ namespace iti.backendtest.Tests
                 Assert.IsTrue(item.StartsWith(resultList[i]));
                 i++;
             }
+            obj.Dispose();
         }
 
         [TestMethod]
@@ -46,8 +47,8 @@ namespace iti.backendtest.Tests
         [TestMethod]
         public void ExecucaoArquivoSemPrepare()
         {
-            var obj = new EntryCollectorFile();
-            Assert.ThrowsException<NullReferenceException>(() => obj.AddEntry(new Consolidator.Entry { Category = "x", Day = 1, Month = 2, Desc = "xx", Value = -13 }, ci));
+            using (var obj = new EntryCollectorFile())
+                Assert.ThrowsException<NullReferenceException>(() => obj.AddEntry(new Consolidator.Entry { Category = "x", Day = 1, Month = 2, Desc = "xx", Value = -13 }, ci));
         }
 
         [TestMethod]
@@ -58,6 +59,5 @@ namespace iti.backendtest.Tests
             obj.AddEntry(new Consolidator.Entry { Category = "x", Day = 1, Month = 2, Desc = "xx", Value = -13 }, ci);
             Assert.ThrowsException<IOException>(() => obj.GetOrderedEntries(ci).Count());
         }
-
     }
 }

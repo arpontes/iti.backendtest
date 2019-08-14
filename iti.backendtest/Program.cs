@@ -29,7 +29,7 @@ namespace iti.backendtest
             //Em relação aos JSONs, utilizei o Newtonsoft, que é utilizado pelo próprio .Net Core até a versão 2.2. Isso significa que um arquivo json muito grande levará a um consumo grande de memória RAM.
             //Na versão 3, haveria a possibilidade de utilizar o novo serializador, que consegue fazer a leitura do JSON de forma iterativa, o que levaria a uma redução no uso de memória.
 
-            var entryCollector = isLogFileEstimatedAsBig ? (IEntryCollector)new EntryCollectorFile() : new EntryCollectorMemory();
+            using (var entryCollector = isLogFileEstimatedAsBig ? (IEntryCollector)new EntryCollectorFile() : new EntryCollectorMemory())
             using (var obj = new Consolidator(ci, entryCollector))
             {
                 //As três chamadas (arquivo de log, e os endpoints de pagamentos e recebimentos) não tem dependências entre si, logo, podem ser paralelizadas.
