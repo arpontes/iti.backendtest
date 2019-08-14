@@ -18,7 +18,7 @@ namespace iti.backendtest
         static void Main(string[] args)
         {
             var logFilePath = args[0];
-            var isLogFileEstimatedAsBig = args.Length > 0 && args[1] == "1";
+            var isLogFileEstimatedAsBig = args.Length > 1 && args[1] == "1";
 
             //Se o arquivo for muito grande, vale a pena utilizar o sistema de arquivos para armazenar a lista das movimentações.
             //O uso de memória (e consequentemente a pressão sobre o GC) é muito menor. Utilizando um arquivo de 1.5 milhão de linhas, a execução
